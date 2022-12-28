@@ -5,6 +5,10 @@ import { Cache } from 'cache-manager';
 
 import { IsNotEmpty } from 'class-validator';
 
+import { Model } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { NewsDocument, News } from './news.schema';
+
 export class CreateNewsDto {
     @IsNotEmpty()
     title: string;
@@ -13,36 +17,22 @@ export class CreateNewsDto {
     description: string;
 }
 
-export interface INews {
-    id: number,
-    title: string,
-    description: string,
-    createdAt: number
-}
 
 @Controller('news')
 export class NewsController {
 
-    private readonly news: INews[] = Object.keys([...Array(20)])
-        .map(key => Number(key) + 1)
-        .map(n => ({
-            id: n,
-            title: `Важная новость ${n}`,
-            description: (rand => ([...Array(rand(1000))].map(() => rand(10 ** 16).toString(36).substring(rand(10))).join(' ')))(max => Math.ceil(Math.random() * max)),
-            createdAt: Date.now()
-        }));
-
-    constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
+    constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache,
+        @InjectModel('News') private newsModel: Model<NewsDocument>) { }
 
     @Get()
     async getNews() {
 
-        let cachedNews: INews[] | null = await this.cacheManager.get('news');
+        let cachedNews: News[] | null = await this.cacheManager.get('news');
 
         if (!cachedNews) {
             console.log('news are not in the cache');
-            await this.cacheManager.set('news', this.news);
-            cachedNews = [...this.news];
+            cachedNews = await this.newsModel.find().exec();
+            await this.cacheManager.set('news', cachedNews);
         }
         else
             console.log('news are in the cache');
@@ -57,19 +47,8 @@ export class NewsController {
     @Post()
     @Header('Cache-Control', 'none')
     async create(@Body() peaceOfNews: CreateNewsDto) {
+        const newNews = new this.newsModel({ ...peaceOfNews, createdAt: Date.now() });
 
-        const newNews: INews = {
-            id: Math.ceil(Math.random() * 1000),
-            ...peaceOfNews,
-            createdAt: Date.now()
-        };
-        this.news.push(newNews);
-
-        return new Promise(resolve => {
-            setTimeout(() => {
-                console.log('Новость успешно создана', newNews);
-                resolve(newNews);
-            }, 100)
-        });
+        return await newNews.save();
     }
 }
