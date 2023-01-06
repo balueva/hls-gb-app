@@ -14,6 +14,9 @@ export class News {
 
     @Prop()
     createdAt: number;
+
+    @Prop()
+    author: string;
 }
 
 export const NewsSchema = SchemaFactory.createForClass(News);
